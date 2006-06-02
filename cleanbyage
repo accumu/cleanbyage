@@ -1,0 +1,168 @@
+#!/usr/local/bin/perl -w
+# vim:ts=4:sw=4:et:
+#
+# $Id$
+#
+# Edit on nixon.
+
+use Filesys::Statvfs;
+use Sys::Hostname;
+use File::Find ();
+use Getopt::Std;
+use Fcntl ':mode';
+
+use strict;
+use warnings;
+
+# Set the variable $File::Find::dont_use_nlink if you're using AFS,
+# since AFS cheats.
+
+# for the convenience of &wanted calls, including -eval statements:
+use vars qw/*name *dir *prune/;
+*name   = *File::Find::name;
+*dir    = *File::Find::dir;
+*prune  = *File::Find::prune;
+
+sub wanted;
+sub debug;
+
+my(%opts);
+
+# Min free percentage
+my $defminfree = 20;
+my $minfree = $defminfree;
+my $minifree = $defminfree;
+my $defexclude = "lost\+found/.*";
+my $exclude = $defexclude;
+
+getopts('hdm:i:e:D', \%opts);
+if(defined($opts{m})) {
+    $minfree = $opts{m};
+}
+if(defined($opts{i})) {
+    $minifree = $opts{i};
+}
+
+if($minfree < 0 || $minfree > 100) {
+    die "Bad value for -m: $minfree\n";
+}
+if($minifree < 0 || $minifree > 100) {
+    die "Bad value for -i: $minifree\n";
+}
+
+my $filesystem=shift @ARGV;
+
+if(defined($opts{'h'}) || !defined($filesystem)) {
+    print <<EOH;
+   usage: $0 [flags] directory
+        -h      - This help
+        -d      - Don't delete directories
+        -m NN   - Min free space (percent) (default $defminfree)
+        -i NN   - Min free inodes (percent) (default $defminfree)
+        -e RE   - Exclude RE (default $defexclude)
+        -D      - Debug output
+EOH
+    exit 1;
+}
+
+$filesystem =~ s|/+$||;
+
+if($filesystem eq "" || ! -d $filesystem) {
+    die "Not a directory: $filesystem";
+}
+
+if($opts{'e'}) {
+    $exclude = $opts{'e'};
+    eval {
+        "kaka" =~ m|$filesystem/$exclude|;
+    };
+    if($@) {
+        die "Bad value for -e:\n",$@,"\n";
+    }
+}
+
+my($bsize, $frsize, $blocks, $bfree, $bavail, $files, $ffree, $favail,
+    $fsid, $basetype, $flag, $namemax, $fstr) = statvfs($filesystem);
+
+if(!defined($bsize)) {
+    print "Unable to statvfs $filesystem: $!\n";
+    exit 1;
+}
+
+my $fssize = $frsize * $blocks;
+my $fsfree = $bsize * $bavail;
+
+my $minfinode=$files*$minifree/100;
+my $minfbytes=$fssize*$minfree/100;
+
+debug "$filesystem:\nBytes\t\tInodes\n$fsfree\t$favail";
+
+exit 0 if $fsfree > $minfbytes && $favail > $minfinode;
+
+my %files;
+
+File::Find::find({wanted => \&wanted}, $filesystem);
+
+my @rootfiles;
+
+foreach my $fil (sort { $files{$a}{atime} <=> $files{$b}{atime} } keys %files) {
+    debug "fil: $fil  atime: $files{$fil}{atime}";
+    last if $fsfree > $minfbytes && $favail > $minfinode;
+
+    if( $files{$fil}{uid}==0 || $files{$fil}{gid}==0 ) {
+        push @rootfiles, $fil;
+        next;
+    }
+    if(S_IFDIR($files{$fil}{mode})) {
+        if ( rmdir $fil ) {
+            $favail++;
+            $fsfree+=$files{$fil}{size};
+            debug "rmdir '$fil'";
+        }
+    }
+    else {
+        if ( unlink $fil ) {
+            $favail++;
+            $fsfree+=$files{$fil}{size};
+            debug "unlink '$fil'";
+        } else {
+            print STDERR "unlink '$fil': $!\n";
+        }
+    }
+}
+
+if( @rootfiles ) {
+    print "Root owns files marked for removal on ".hostname.":$filesystem\n";
+    print join "\t\n", @rootfiles;
+    print "\n";
+}
+
+exit 0;
+
+sub wanted {
+    my ($mode, $uid, $gid, $atime, $blksize, $blocks);
+
+    ($mode, $uid, $gid, $atime, $blksize, $blocks) = (lstat($_))[2,4,5,8,11,12];
+    return unless defined $uid;
+    return if $name eq $filesystem;
+    return if $name =~ m|$filesystem/$exclude|;
+
+    return unless (!$opts{'d'} && -d _) || -f _ || -l _;
+
+    $files{$name}{mode}=$mode;
+    $files{$name}{uid}=$uid;
+    $files{$name}{gid}=$gid;
+    $files{$name}{atime}=$atime;
+    $files{$name}{size}=$blksize * $blocks;
+}
+
+sub debug
+{
+    if( !defined($opts{'D'})) {
+        return;
+    }
+
+    my (@args) = @_;
+
+    print @args, "\n";
+}
