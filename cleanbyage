@@ -1,7 +1,7 @@
 #!/usr/local/bin/perl -w
 # vim:ts=4:sw=4:et:
 #
-# $Id$
+# $Id: cleanbyage,v 1.1 2006/06/02 13:43:56 root Exp $
 #
 # Edit on nixon.
 
@@ -106,14 +106,14 @@ File::Find::find({wanted => \&wanted}, $filesystem);
 my @rootfiles;
 
 foreach my $fil (sort { $files{$a}{atime} <=> $files{$b}{atime} } keys %files) {
-    debug "fil: $fil  atime: $files{$fil}{atime}";
+    debug "fil: $fil  atime: $files{$fil}{atime}  size: $files{$fil}{size}";
     last if $fsfree > $minfbytes && $favail > $minfinode;
 
     if( $files{$fil}{uid}==0 || $files{$fil}{gid}==0 ) {
         push @rootfiles, $fil;
         next;
     }
-    if(S_IFDIR($files{$fil}{mode})) {
+    if($files{$fil}{mode} & S_IFDIR) {
         if ( rmdir $fil ) {
             $favail++;
             $fsfree+=$files{$fil}{size};
@@ -140,9 +140,9 @@ if( @rootfiles ) {
 exit 0;
 
 sub wanted {
-    my ($mode, $uid, $gid, $atime, $blksize, $blocks);
+    my ($mode, $uid, $gid, $atime, $blocks);
 
-    ($mode, $uid, $gid, $atime, $blksize, $blocks) = (lstat($_))[2,4,5,8,11,12];
+    ($mode, $uid, $gid, $atime, $blocks) = (lstat($_))[2,4,5,8,12];
     return unless defined $uid;
     return if $name eq $filesystem;
     return if $name =~ m|$filesystem/$exclude|;
@@ -153,7 +153,7 @@ sub wanted {
     $files{$name}{uid}=$uid;
     $files{$name}{gid}=$gid;
     $files{$name}{atime}=$atime;
-    $files{$name}{size}=$blksize * $blocks;
+    $files{$name}{size}=$blocks * 512;
 }
 
 sub debug
