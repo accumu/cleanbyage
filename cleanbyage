@@ -1,7 +1,7 @@
 #!/usr/local/bin/perl -w
 # vim:ts=4:sw=4:et:
 #
-# $Id: cleanbyage,v 1.3 2006/06/10 13:44:50 root Exp root $
+# $Id: cleanbyage,v 1.4 2006/07/18 14:29:23 root Exp $
 #
 # Edit on nixon.
 
@@ -25,6 +25,7 @@ use vars qw/*name *dir *prune/;
 
 sub wanted;
 sub debug;
+sub printsize;
 
 my(%opts);
 
@@ -36,7 +37,7 @@ my $minifree = $defminfree;
 my $defexclude = "lost\+found/.*";
 my $exclude = $defexclude;
 
-getopts('hdm:M:i:e:D', \%opts);
+getopts('hsdm:M:i:e:D', \%opts);
 if(defined($opts{m})) {
     $minfree = $opts{m};
 }
@@ -66,6 +67,7 @@ if(defined($opts{'h'}) || !defined($filesystem)) {
     print <<EOH;
    usage: $0 [flags] directory
         -h      - This help
+        -s      - Statistics mode, show fs usage stats, don't delete anything
         -d      - Don't delete directories
         -m NN   - Min free space to start cleaning (percent) (default $defminfree)
         -M NN   - Free space to stop cleaning (percent) (default $defminfree)
@@ -108,13 +110,59 @@ my $minfbytes=$fssize*$minfree/100;
 
 debug "$filesystem:\nBytes\t\tInodes\n$fsfree\t$favail";
 
-exit 0 if $fsfree > $minfbytes && $favail > $minfinode;
+exit 0 if $fsfree > $minfbytes && $favail > $minfinode && !$opts{'s'};
 
 $minfbytes=$fssize*$mincleanfree/100;
 
 my %files;
+my $totsize = 0; # Total size, by adding all filesizes in wanted().
 
 File::Find::find({wanted => \&wanted}, $filesystem);
+
+if($opts{'s'}) {
+    print "Usage statistics: $filesystem\n";
+    print "Total size of files found: ",printsize($totsize),"\n";
+    my $increment = $totsize / 10;
+    if($increment < 1) {
+        print "Total size too small to do anything useful\n";
+        exit 0;
+    }
+
+    printf "%-21s %-25s %s\n", "At size (% of total)", "Newest file", "Oldest file";
+
+    my $nextinc = $increment;
+    my $accumulated = 0;
+    my ($newatime, $lastatime);
+
+    foreach my $fil (sort { $files{$b}{atime} <=> $files{$a}{atime} } 
+        keys %files) 
+    {
+        $accumulated += $files{$fil}{size};
+        if(!$newatime) {
+            $newatime = $files{$fil}{atime};
+        }
+
+        if($accumulated > $nextinc) {
+            printf "%-21s %-25s %s\n", 
+                  printsize($accumulated)." (".int(($accumulated/$totsize)*100)."%)",
+                  scalar localtime($newatime),
+                  scalar localtime($files{$fil}{atime});
+            while($nextinc < $accumulated) {
+                $nextinc += $increment;
+            }
+            $newatime = undef;
+            $lastatime = undef;
+        }
+        else {
+            $lastatime = $files{$fil}{atime};
+        }
+    }
+    printf "%-21s %-25s %s\n", 
+          printsize($accumulated)." (100%)", "-",
+          scalar localtime($lastatime) if($lastatime);
+
+    exit 0;
+}
 
 my @rootfiles;
 
@@ -167,6 +215,7 @@ sub wanted {
     $files{$name}{gid}=$gid;
     $files{$name}{atime}=$atime;
     $files{$name}{size}=$blocks * 512;
+    $totsize += $files{$name}{size};
 }
 
 sub debug
@@ -178,4 +227,28 @@ sub debug
     my (@args) = @_;
 
     print @args, "\n";
+}
+
+sub printsize($)
+{
+    my $size = shift;
+
+    if($size > 1024*1024*1024*1024) {
+        $size = int($size/(1024*1024*1024*1024));
+        return "$size TB";
+    }
+    if($size > 1024*1024*1024) {
+        $size = int($size/(1024*1024*1024));
+        return "$size GB";
+    }
+    if($size > 1024*1024) {
+        $size = int($size/(1024*1024));
+        return "$size MB";
+    }
+    if($size > 1024) {
+        $size = int($size/1024);
+        return "$size kB";
+    }
+
+    return $size;
 }
