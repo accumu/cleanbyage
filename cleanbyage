@@ -1,7 +1,7 @@
 #!/usr/local/bin/perl -w
 # vim:ts=4:sw=4:et:
 #
-# $Id: cleanbyage,v 1.4 2006/07/18 14:29:23 root Exp $
+# $Id: cleanbyage,v 1.5 2006/09/22 14:16:03 root Exp root $
 #
 # Edit on nixon.
 
@@ -170,7 +170,9 @@ foreach my $fil (sort { $files{$a}{atime} <=> $files{$b}{atime} } keys %files) {
     debug "fil: $fil  atime: $files{$fil}{atime}  size: $files{$fil}{size}";
     last if $fsfree > $minfbytes && $favail > $minfinode;
 
-    if( $files{$fil}{uid}==0 || $files{$fil}{gid}==0 ) {
+    if( $files{$fil}{uid}==0 || $files{$fil}{gid}==0 ||
+        $files{$fil}{uid} > (2**32 -500) ||
+        $files{$fil}{gid} > (2**32 -500)    ) {
         push @rootfiles, $fil;
         next;
     }
