@@ -1,7 +1,7 @@
 #!/usr/local/bin/perl -w
 # vim:ts=4:sw=4:et:
 #
-# $Id: cleanbyage,v 1.5 2006/09/22 14:16:03 root Exp root $
+# $Id: cleanbyage,v 1.6 2007/07/09 22:27:52 root Exp root $
 #
 # Edit on nixon.
 
@@ -189,7 +189,7 @@ foreach my $fil (sort { $files{$a}{atime} <=> $files{$b}{atime} } keys %files) {
             $fsfree+=$files{$fil}{size};
             debug "unlink '$fil'";
         } else {
-            print STDERR "unlink '$fil': $!\n";
+            print STDERR "unlink '$fil': $!\n" unless $!{ENOENT};
         }
     }
 }
