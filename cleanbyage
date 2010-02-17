@@ -1,11 +1,10 @@
 #!/usr/local/bin/perl -w
 # vim:ts=4:sw=4:et:
 #
-# $Id: cleanbyage,v 1.6 2007/07/09 22:27:52 root Exp root $
+# $Id: cleanbyage,v 1.7 2008/08/15 19:48:26 root Exp root $
 #
 # Edit on nixon.
 
-use Filesys::Statvfs;
 use Sys::Hostname;
 use File::Find ();
 use Getopt::Std;
@@ -94,17 +93,7 @@ if($opts{'e'}) {
     }
 }
 
-my($bsize, $frsize, $blocks, $bfree, $bavail, $files, $ffree, $favail,
-    $fsid, $basetype, $flag, $namemax, $fstr) = statvfs($filesystem);
-
-if(!defined($bsize)) {
-    print "Unable to statvfs $filesystem: $!\n";
-    exit 1;
-}
-
-my $fssize = $frsize * $blocks;
-my $fsfree = $frsize * $bavail;
-
+my ( $fssize, $fsfree, $files, $favail ) = fsinfo($filesystem);
 my $minfinode=$files*$minifree/100;
 my $minfbytes=$fssize*$minfree/100;
 
@@ -253,4 +242,69 @@ sub printsize($)
     }
 
     return $size;
+}
+
+sub fsinfo
+{
+    my $filesystem = shift;
+    my ($fssize,$fsfree,$isize,$ifree);
+
+    # Test Filesys::Statvfs method
+    eval {
+        require Filesys::Statvfs;
+
+        debug "Using Filesys:Statvfs";
+
+        my($bsize, $frsize, $blocks, $bfree, $bavail, $files, $ffree, $favail,
+        $fsid, $basetype, $flag, $namemax, $fstr) = Filesys::Statvfs::statvfs($filesystem);
+
+        if(!defined($bsize)) {
+            print STDERR "Unable to statvfs $filesystem: $!\n";
+            exit 1;
+        }
+
+        $fssize = $frsize * $blocks;
+        $fsfree = $frsize * $bavail;
+
+        $isize = $favail;
+        $ifree = $files;
+    };
+
+    if ($@) {
+        debug "Using df -k / df -i";
+        #
+        # Not the best implementation, but it works =)
+        # TODO: fix to work better with diffrent versions of df.
+
+        my @dfk=`df -k $filesystem 2>/dev/null`;
+        if ($? != 0) {
+            print STDERR "Failed running: df -k $filesystem\n";
+
+        # The first column may be printed on a separate line.
+        # The relevant numbers are always on the last line.
+        } elsif ($dfk[-1] =~ /\s+(\d+)\s+\d+\s+(\d+)\s+\d+%\s+\//) {
+    	    $fssize = $1*1024;
+    	    $fsfree = $2*1024;
+        } else {
+            print STDERR "Failed interpreting output of: df -k $filesystem\n";
+            exit 1;
+        }
+
+        my @dfi=`df -i $filesystem 2>/dev/null`;
+        if ($? != 0) {
+            print STDERR "Failed running: df -i $filesystem\n";
+
+        # The first column may be printed on a separate line.
+        # The relevant numbers are always on the last line.
+        } elsif ($dfi[-1] =~ /\s+(\d+)\s+\d+\s+(\d+)\s+\d+%\s+\//) {
+    	    $isize = $1;
+    	    $ifree = $2;
+        } else {
+            print STDERR "Failed interpreting output of: df -i $filesystem\n";
+            exit 1;
+        }
+
+    }
+
+    return \( $fssize, $fsfree, $isize, $ifree );
 }
