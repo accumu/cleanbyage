@@ -1,7 +1,7 @@
 #!/usr/local/bin/perl -w
 # vim:ts=4:sw=4:et:
 #
-# $Id: cleanbyage,v 1.7 2008/08/15 19:48:26 root Exp root $
+# $Id: cleanbyage,v 1.8 2010/02/17 14:47:52 root Exp root $
 #
 # Edit on nixon.
 
@@ -306,5 +306,5 @@ sub fsinfo
 
     }
 
-    return \( $fssize, $fsfree, $isize, $ifree );
+    return ( $fssize, $fsfree, $isize, $ifree );
 }
