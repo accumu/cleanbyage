@@ -12,6 +12,10 @@ tuning for fewer file system traversals by doing more cleanup each time.
 
 There is support for specifying a regexp of files to always be preserved.
 
+# Installation
+
+Requires perl and a few common modules, see the script for details.
+
 # Usage
 
 `cleanbyage /path/to/directory/to/clean`
