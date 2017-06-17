@@ -1,9 +1,12 @@
-#!/usr/local/bin/perl -w
+#!/usr/bin/perl
 # vim:ts=4:sw=4:et:
-#
-# $Id: cleanbyage,v 1.9 2010/02/17 14:58:32 root Exp root $
-#
-# Edit on nixon.
+
+# cleanbyage - Remove oldest files from a directory tree based on
+#              atime. Typically used for shared tmp/scratch and cache
+#              file systems. Supports separate start/stop space/inode
+#              limits to enable cleaning out more files when triggered.
+#              Can also print age statistics, handy to evaluate filesystem
+#              size and cleanup settings.
 
 #  Copyright 2006 Tomas Forsman (né Ögren)
 #  Copyright 2008 Niklas Edmundsson
@@ -25,6 +28,7 @@ use Sys::Hostname;
 use File::Find ();
 use Getopt::Std;
 use Fcntl ':mode';
+# Filesys::Statvfs is recommended, but df is used as a fallback.
 
 use strict;
 use warnings;
